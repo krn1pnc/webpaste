@@ -1,0 +1,10 @@
+pub const LISTEN_ADDR: &'static str = "127.0.0.1:3000";
+pub const BASE_URL: &'static str = "http://127.0.0.1:3000";
+pub const UPLOAD_FILE_DIR: &'static str = "./uploads";
+pub const DATABASE_FILE: &'static str = "webpaste.db";
+pub const GEN_TAIL_MAX_ATTAMPS: usize = 16;
+pub const DEFAULT_TAIL_LEN: usize = 4;
+pub const MIN_EXPIRE_AGE: i64 = 30 * 24 * 60 * 60;
+pub const MAX_EXPIRE_AGE: i64 = 12 * 30 * 24 * 60 * 60;
+pub const MAX_FILE_SIZE: usize = 512 * 1024 * 1024;
+pub const CLEANUP_DURATION: i64 = 60;
