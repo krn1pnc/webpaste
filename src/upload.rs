@@ -68,7 +68,7 @@ async fn parse_multipart(mut multipart: Multipart) -> Result<(Bytes, usize, i64)
                     .text()
                     .await?
                     .parse::<usize>()
-                    .map_err(|e| AppError::ParseError(e.to_string()))?
+                    .map_err(|e| AppError::LenParseError(e.to_string()))?
             }
             "expires" => match expires {
                 None => expires = Some(field.text().await?),
@@ -85,10 +85,10 @@ async fn parse_multipart(mut multipart: Multipart) -> Result<(Bytes, usize, i64)
         Some(expires) => match expires.chars().all(|c| c.is_numeric()) {
             true => expires
                 .parse::<i64>()
-                .map_err(|e| AppError::ParseError(e.to_string()))?,
+                .map_err(|e| AppError::ExpiresParseError(e.to_string()))?,
             false => {
                 now + parse_duration(&expires)
-                    .map_err(|e| AppError::ParseError(e.to_string()))?
+                    .map_err(|e| AppError::ExpiresParseError(e.to_string()))?
                     .as_secs() as i64
             }
         },
@@ -159,8 +159,19 @@ pub async fn handle_upload(
                     .into_response();
             }
             AppError::FieldHasNoName => return http::StatusCode::BAD_REQUEST.into_response(),
-            AppError::ParseError(msg) => {
-                return (http::StatusCode::BAD_REQUEST, msg).into_response();
+            AppError::LenParseError(msg) => {
+                return (
+                    http::StatusCode::BAD_REQUEST,
+                    format!("parse error in 'len' field: {}\n", msg),
+                )
+                    .into_response();
+            }
+            AppError::ExpiresParseError(msg) => {
+                return (
+                    http::StatusCode::BAD_REQUEST,
+                    format!("parse error in 'expires' field: {}\n", msg),
+                )
+                    .into_response();
             }
             AppError::FileTooLarge => return http::StatusCode::PAYLOAD_TOO_LARGE.into_response(),
             AppError::TailDrained => {

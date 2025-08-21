@@ -29,8 +29,11 @@ pub enum AppError {
     #[error("field has no name")]
     FieldHasNoName,
 
-    #[error("parse error")]
-    ParseError(String),
+    #[error("{0}")]
+    LenParseError(String),
+
+    #[error("{0}")]
+    ExpiresParseError(String),
 
     #[error("file too large")]
     FileTooLarge,
