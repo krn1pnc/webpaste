@@ -125,24 +125,24 @@ pub async fn handle_upload(
     multipart: Multipart,
 ) -> http::Response<Body> {
     match upload(&db_pool, multipart).await {
-        Ok(tail) => return format!("{}/{}", BASE_URL, tail).into_response(),
+        Ok(tail) => return format!("{}/{}\n", BASE_URL, tail).into_response(),
         Err(e) => match e {
             AppError::Multipart(e) => return e.status().into_response(),
             AppError::RequestError(e) => match e {
                 nyquest::Error::InvalidUrl => {
-                    return (http::StatusCode::BAD_REQUEST, "url is invalid").into_response();
+                    return (http::StatusCode::BAD_REQUEST, "url is invalid\n").into_response();
                 }
                 nyquest::Error::ResponseTooLarge => {
-                    return (http::StatusCode::BAD_REQUEST, "response too large").into_response();
+                    return (http::StatusCode::BAD_REQUEST, "response too large\n").into_response();
                 }
                 nyquest::Error::RequestTimeout => {
-                    return (http::StatusCode::SERVICE_UNAVAILABLE, "request timeout")
+                    return (http::StatusCode::SERVICE_UNAVAILABLE, "request timeout\n")
                         .into_response();
                 }
                 nyquest::Error::NonSuccessfulStatusCode(c) => {
                     return (
                         http::StatusCode::SERVICE_UNAVAILABLE,
-                        format!("request failed with status code {}", c.code()),
+                        format!("request failed with status code {}\n", c.code()),
                     )
                         .into_response();
                 }
@@ -154,7 +154,7 @@ pub async fn handle_upload(
             AppError::NoFileUploaded => {
                 return (
                     http::StatusCode::BAD_REQUEST,
-                    "no 'file' or 'url' specified",
+                    "no 'file' or 'url' specified\n",
                 )
                     .into_response();
             }
@@ -166,7 +166,7 @@ pub async fn handle_upload(
             AppError::TailDrained => {
                 return (
                     http::StatusCode::SERVICE_UNAVAILABLE,
-                    "cannot generate an unique url, try specifying a larger 'tail_len'",
+                    "cannot generate an unique url, try specifying a larger 'tail_len'\n",
                 )
                     .into_response();
             }
