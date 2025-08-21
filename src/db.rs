@@ -1,8 +1,8 @@
-use crate::{GEN_TAIL_MAX_ATTAMPS, error::AppError};
-use deadpool_sqlite::{
-    Pool,
-    rusqlite::{Error, OptionalExtension},
-};
+use crate::error::AppError;
+use crate::{GEN_TAIL_MAX_ATTAMPS, UPLOAD_FILE_DIR};
+
+use deadpool_sqlite::Pool;
+use deadpool_sqlite::rusqlite::{Error, OptionalExtension};
 use rand::distr::{Alphabetic, SampleString};
 
 pub async fn init_db(db_pool: &Pool) -> Result<(), AppError> {
@@ -23,6 +23,10 @@ pub async fn init_db(db_pool: &Pool) -> Result<(), AppError> {
                     mimetype TEXT,
                     expires_at INTEGER
                 )",
+                (),
+            )?;
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS index_expires_at ON urls(expires_at)",
                 (),
             )?;
             return Ok::<(), Error>(());
@@ -83,52 +87,58 @@ pub async fn add_url(
     return Ok(res);
 }
 
-pub async fn cleanup_expired_url(db_pool: &Pool, now: i64) -> Result<Vec<String>, AppError> {
+pub async fn cleanup_expired_urls(db_pool: &Pool, now: i64) -> Result<(), AppError> {
     let db_conn = db_pool.get().await?;
-    let db_param = (now,);
-    let res = db_conn
+    db_conn
         .interact(move |conn| {
             let tx = conn.transaction()?;
-
             tx.execute(
-                "CREATE TEMP TABLE expired_count AS
-                SELECT file_sha256sum, COUNT(*) AS cnt
-                FROM urls
-                WHERE expires_at <= ?1
-                GROUP BY file_sha256sum",
-                db_param,
-            )?;
-
-            tx.execute("DELETE FROM urls WHERE expires_at <= ?1", db_param)?;
-
-            tx.execute(
-                "UPDATE files
-                SET ref_count = ref_count - (
-                    SELECT cnt
-                    FROM expired_count
-                    WHERE expired_count.file_sha256sum = files.file_sha256sum
+                "WITH expired_count AS (
+                    SELECT file_sha256sum, COUNT(*) AS decr
+                    FROM urls
+                    WHERE expires_at <= ?1
+                    GROUP BY file_sha256sum
                 )
-                WHERE file_sha256sum IN (SELECT file_sha256sum FROM expired_count)",
-                (),
+                UPDATE files
+                SET ref_count = ref_count - expired_count.decr
+                FROM expired_count
+                WHERE files.file_sha256sum = expired_count.file_sha256sum",
+                (now,),
             )?;
-
-            let mut stmt =
-                tx.prepare("DELETE FROM files WHERE ref_count = 0 RETURNING file_sha256sum")?;
-            let query_res = stmt.query_map((), |row| row.get::<_, String>(0))?;
-            let mut res = Vec::new();
-            for value in query_res {
-                res.push(value?);
-            }
-            stmt.finalize()?;
-
-            tx.execute("DROP TABLE expired_count", ())?;
-
+            tx.execute("DELETE FROM urls WHERE expires_at <= ?1", (now,))?;
+            tx.execute("DELETE FROM files WHERE ref_count = 0", ())?;
             tx.commit()?;
-
-            return Ok::<_, AppError>(res);
+            return Ok::<(), AppError>(());
         })
         .await??;
-    return Ok(res);
+    return Ok(());
+}
+
+pub async fn cleanup_unreachable_files(db_pool: &Pool) -> Result<(), AppError> {
+    let db_conn = db_pool.get().await?;
+    db_conn
+        .interact(|conn| {
+            let upload_dir = std::fs::read_dir(UPLOAD_FILE_DIR)?;
+            for entry in upload_dir {
+                let path = entry?.path();
+                if !path.is_file() {
+                    continue;
+                }
+
+                let exist = conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM files WHERE file_sha256sum = ?1)",
+                    (path.file_name().unwrap().to_string_lossy(),),
+                    |row| row.get::<_, bool>(0),
+                )?;
+
+                if !exist {
+                    std::fs::remove_file(path)?;
+                }
+            }
+            return Ok::<_, AppError>(());
+        })
+        .await??;
+    return Ok(());
 }
 
 pub async fn get_file_by_url(

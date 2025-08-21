@@ -1,56 +1,26 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
-use axum::{
-    Router,
-    response::Html,
-    routing::{get, post},
-};
-use chrono::Utc;
-use deadpool_sqlite::{Config, Pool, Runtime};
+use axum::routing::{get, post};
+use axum::{Router, response::Html};
+use deadpool_sqlite::{Config, Runtime};
 
-use webpaste::{
-    AppError, CLEANUP_DURATION, DATABASE_FILE, LISTEN_ADDR, UPLOAD_FILE_DIR, cleanup_expired_url,
-};
-use webpaste::{handle_access, handle_upload, init_db};
+use webpaste::{DATABASE_FILE, LISTEN_ADDR};
+use webpaste::{handle_access, handle_upload, init_cleanup, init_db};
 
 async fn handle_root() -> Html<&'static str> {
     return Html(include_str!("../index.html"));
 }
 
-async fn cleanup_urls(db_pool: &Pool) -> Result<(), AppError> {
-    let now = Utc::now().timestamp();
-    let cleanup_files = cleanup_expired_url(&db_pool, now).await?;
-    for filename in cleanup_files {
-        tokio::fs::remove_file(format!("{}/{}", UPLOAD_FILE_DIR, filename)).await?;
-    }
-    return Ok(());
-}
-
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+    nyquest_preset::register();
 
     let db_cfg = Config::new(DATABASE_FILE);
     let db_pool = Arc::new(db_cfg.create_pool(Runtime::Tokio1).unwrap());
     init_db(&db_pool).await.unwrap();
 
-    tokio::fs::create_dir(UPLOAD_FILE_DIR)
-        .await
-        .unwrap_or_else(|e| match e.kind() {
-            std::io::ErrorKind::AlreadyExists => (),
-            other => panic!("error creating the uploads directory: {}", other),
-        });
-
-    let db_pool_cleanup = db_pool.clone();
-    tokio::task::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(CLEANUP_DURATION as u64));
-        loop {
-            interval.tick().await;
-            cleanup_urls(&db_pool_cleanup).await.unwrap();
-        }
-    });
-
-    nyquest_preset::register();
+    init_cleanup(&db_pool);
 
     let app = Router::new()
         .route("/", get(handle_root))

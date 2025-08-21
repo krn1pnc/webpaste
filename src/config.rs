@@ -7,4 +7,5 @@ pub const DEFAULT_TAIL_LEN: usize = 4;
 pub const MIN_EXPIRE_AGE: i64 = 30 * 24 * 60 * 60;
 pub const MAX_EXPIRE_AGE: i64 = 12 * 30 * 24 * 60 * 60;
 pub const MAX_FILE_SIZE: usize = 512 * 1024 * 1024;
-pub const CLEANUP_DURATION: i64 = 60;
+pub const CLEANUP_URLS_DURATION: i64 = 30;
+pub const CLEANUP_FILES_DURATION: i64 = 60;
