@@ -2,12 +2,12 @@ use crate::error::AppError;
 use crate::{GEN_TAIL_MAX_ATTAMPS, UPLOAD_FILE_DIR};
 
 use deadpool_sqlite::Pool;
-use deadpool_sqlite::rusqlite::{Error, OptionalExtension};
+use deadpool_sqlite::rusqlite::OptionalExtension;
 use rand::distr::{Alphabetic, SampleString};
 
 pub async fn init_db(db_pool: &Pool) -> Result<(), AppError> {
     let db_conn = db_pool.get().await?;
-    db_conn
+    return db_conn
         .interact(|conn| {
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS files(
@@ -29,10 +29,9 @@ pub async fn init_db(db_pool: &Pool) -> Result<(), AppError> {
                 "CREATE INDEX IF NOT EXISTS index_expires_at ON urls(expires_at)",
                 (),
             )?;
-            return Ok::<(), Error>(());
+            return Ok(());
         })
-        .await??;
-    return Ok(());
+        .await?;
 }
 
 pub async fn add_url(
@@ -45,7 +44,7 @@ pub async fn add_url(
     let file_sha256sum = file_sha256sum_.to_string();
     let mimetype = mimetype_.to_string();
     let db_conn = db_pool.get().await?;
-    let res = db_conn
+    return db_conn
         .interact(move |conn| {
             let tx = conn.transaction()?;
 
@@ -80,16 +79,14 @@ pub async fn add_url(
 
             tx.commit()?;
 
-            return Ok::<_, AppError>(tail);
+            return Ok(tail);
         })
-        .await??;
-
-    return Ok(res);
+        .await?;
 }
 
 pub async fn cleanup_expired_urls(db_pool: &Pool, now: i64) -> Result<(), AppError> {
     let db_conn = db_pool.get().await?;
-    db_conn
+    return db_conn
         .interact(move |conn| {
             let tx = conn.transaction()?;
             tx.execute(
@@ -108,15 +105,14 @@ pub async fn cleanup_expired_urls(db_pool: &Pool, now: i64) -> Result<(), AppErr
             tx.execute("DELETE FROM urls WHERE expires_at <= ?1", (now,))?;
             tx.execute("DELETE FROM files WHERE ref_count = 0", ())?;
             tx.commit()?;
-            return Ok::<(), AppError>(());
+            return Ok(());
         })
-        .await??;
-    return Ok(());
+        .await?;
 }
 
 pub async fn cleanup_unreachable_files(db_pool: &Pool) -> Result<(), AppError> {
     let db_conn = db_pool.get().await?;
-    db_conn
+    return db_conn
         .interact(|conn| {
             let upload_dir = std::fs::read_dir(UPLOAD_FILE_DIR)?;
             for entry in upload_dir {
@@ -135,10 +131,9 @@ pub async fn cleanup_unreachable_files(db_pool: &Pool) -> Result<(), AppError> {
                     std::fs::remove_file(path)?;
                 }
             }
-            return Ok::<_, AppError>(());
+            return Ok(());
         })
-        .await??;
-    return Ok(());
+        .await?;
 }
 
 pub async fn get_file_by_url(
@@ -147,16 +142,16 @@ pub async fn get_file_by_url(
 ) -> Result<Option<(String, String)>, AppError> {
     let db_conn = db_pool.get().await?;
     let db_param = (tail.to_string(),);
-    let res = db_conn
+    return db_conn
         .interact(move |conn| {
             return conn
                 .query_row(
                     "SELECT file_sha256sum, mimetype FROM urls WHERE tail = ?1",
                     db_param,
-                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                    |row| Ok((row.get(0)?, row.get(1)?)),
                 )
-                .optional();
+                .optional()
+                .map_err(|e| AppError::Sqlite(e));
         })
-        .await??;
-    return Ok(res);
+        .await?;
 }
