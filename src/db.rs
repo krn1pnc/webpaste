@@ -51,12 +51,11 @@ pub async fn add_url(
             let mut tail = None;
             for _ in 0..GEN_TAIL_MAX_ATTAMPS {
                 let try_tail = Alphabetic.sample_string(&mut rand::rng(), tail_len);
-                let exist = tx
-                    .query_row("SELECT 1 FROM urls WHERE tail = ?1", (&try_tail,), |_| {
-                        Ok(())
-                    })
-                    .optional()
-                    .map(|o| o.is_some())?;
+                let exist = tx.query_row(
+                    "SELECT EXIST(SELECT 1 FROM urls WHERE tail = ?1)",
+                    (&try_tail,),
+                    |row| row.get::<_, bool>(0),
+                )?;
 
                 if !exist {
                     tail = Some(try_tail);
