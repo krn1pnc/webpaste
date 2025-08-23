@@ -4,6 +4,7 @@ mod config;
 mod db;
 mod error;
 mod upload;
+mod utils;
 
 pub use access::handle_access;
 pub use cleanup::init_cleanup;

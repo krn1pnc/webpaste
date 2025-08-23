@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use crate::UPLOAD_FILE_DIR;
 use crate::db;
 use crate::error::AppError;
+use crate::utils::get_full_path;
 
 use axum::{
     body::Body,
@@ -16,7 +16,7 @@ async fn get_file(db_pool: &Pool, tail: &str) -> Result<(Vec<u8>, String), AppEr
     let (filename, mimetype) = db::get_file_by_url(&db_pool, &tail)
         .await?
         .ok_or(AppError::TailNotFound)?;
-    let data = tokio::fs::read(format!("{}/{}", UPLOAD_FILE_DIR, filename)).await?;
+    let data = tokio::fs::read(get_full_path(&filename)).await?;
     Ok((data, mimetype))
 }
 

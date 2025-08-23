@@ -2,9 +2,8 @@ use std::sync::Arc;
 
 use crate::db::add_url;
 use crate::error::AppError;
-use crate::{
-    BASE_URL, DEFAULT_TAIL_LEN, MAX_EXPIRE_AGE, MAX_FILE_SIZE, MIN_EXPIRE_AGE, UPLOAD_FILE_DIR,
-};
+use crate::conf;
+use crate::utils::get_full_path;
 
 use axum::{
     body::{Body, Bytes},
@@ -18,9 +17,10 @@ use humantime::parse_duration;
 use sha2::{Digest, Sha256};
 
 fn calc_retention(size: usize) -> i64 {
-    return (MIN_EXPIRE_AGE as f64
-        + (MIN_EXPIRE_AGE - MAX_EXPIRE_AGE) as f64
-            * (size as f64 / MAX_FILE_SIZE as f64 - 1.).powf(3.)) as i64;
+    let c = &conf();
+    return (c.min_expire_duration as f64
+        + (c.min_expire_duration - c.max_expire_duration) as f64
+            * (size as f64 / c.max_file_size as f64 - 1.).powf(3.)) as i64;
 }
 
 pub fn guess_mime(data: &[u8]) -> Result<String, AppError> {
@@ -42,7 +42,7 @@ pub fn guess_mime(data: &[u8]) -> Result<String, AppError> {
 
 async fn parse_multipart(mut multipart: Multipart) -> Result<(Bytes, usize, i64), AppError> {
     let mut data = None;
-    let mut tail_len = DEFAULT_TAIL_LEN;
+    let mut tail_len = conf().default_tail_len;
     let mut expires = None;
 
     while let Some(field) = multipart.next_field().await? {
@@ -100,7 +100,7 @@ async fn parse_multipart(mut multipart: Multipart) -> Result<(Bytes, usize, i64)
 
 async fn upload(db_pool: &Pool, multipart: Multipart) -> Result<String, AppError> {
     let (data, tail_len, expires_at) = parse_multipart(multipart).await?;
-    if data.len() > MAX_FILE_SIZE {
+    if data.len() > conf().max_file_size {
         return Err(AppError::FileTooLarge);
     }
 
@@ -109,7 +109,7 @@ async fn upload(db_pool: &Pool, multipart: Multipart) -> Result<String, AppError
 
     let tail = add_url(&db_pool, tail_len, &file_sha256sum, &mimetype, expires_at).await?;
 
-    match tokio::fs::write(format!("{}/{}", UPLOAD_FILE_DIR, file_sha256sum), &data).await {
+    match tokio::fs::write(get_full_path(&file_sha256sum), &data).await {
         Ok(_) => Ok(()),
         Err(e) => match e.kind() {
             std::io::ErrorKind::AlreadyExists => Ok(()),
@@ -125,7 +125,7 @@ pub async fn handle_upload(
     multipart: Multipart,
 ) -> http::Response<Body> {
     match upload(&db_pool, multipart).await {
-        Ok(tail) => return format!("{}/{}\n", BASE_URL, tail).into_response(),
+        Ok(tail) => return format!("{}/{}\n", conf().base_url, tail).into_response(),
         Err(e) => match e {
             AppError::Multipart(e) => return e.status().into_response(),
             AppError::RequestError(e) => match e {

@@ -1,10 +1,11 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::routing::{get, post};
 use axum::{Router, response::Html};
 use deadpool_sqlite::{Config, Runtime};
 
-use webpaste::{DATABASE_FILE, LISTEN_ADDR};
+use webpaste::{conf, init_config};
 use webpaste::{handle_access, handle_upload, init_cleanup, init_db};
 
 async fn handle_root() -> Html<&'static str> {
@@ -16,7 +17,9 @@ async fn main() {
     tracing_subscriber::fmt::init();
     nyquest_preset::register();
 
-    let db_cfg = Config::new(DATABASE_FILE);
+    init_config(std::env::args().nth(1).map(|s| PathBuf::from(s))).unwrap();
+
+    let db_cfg = Config::new(&conf().database_file);
     let db_pool = Arc::new(db_cfg.create_pool(Runtime::Tokio1).unwrap());
     init_db(&db_pool).await.unwrap();
 
@@ -28,8 +31,9 @@ async fn main() {
         .route("/{path}", get(handle_access))
         .with_state(db_pool);
 
-    let listener = tokio::net::TcpListener::bind(LISTEN_ADDR).await.unwrap();
+    let listen_addr = &conf().listen_addr;
+    let listener = tokio::net::TcpListener::bind(listen_addr).await.unwrap();
 
-    tracing::info!("listening on {}", LISTEN_ADDR);
+    tracing::info!("listening on {}", listen_addr);
     axum::serve(listener, app).await.unwrap();
 }

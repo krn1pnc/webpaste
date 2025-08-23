@@ -1,5 +1,4 @@
-use crate::error::AppError;
-use crate::{GEN_TAIL_MAX_ATTAMPS, UPLOAD_FILE_DIR};
+use crate::{error::AppError, conf};
 
 use deadpool_sqlite::Pool;
 use deadpool_sqlite::rusqlite::OptionalExtension;
@@ -49,7 +48,8 @@ pub async fn add_url(
             let tx = conn.transaction()?;
 
             let mut tail = None;
-            for _ in 0..GEN_TAIL_MAX_ATTAMPS {
+            let max_attamps = conf().gen_tail_max_attamps;
+            for _ in 0..max_attamps {
                 let try_tail = Alphabetic.sample_string(&mut rand::rng(), tail_len);
                 let exist = tx.query_row(
                     "SELECT EXISTS(SELECT 1 FROM urls WHERE tail = ?1)",
@@ -113,7 +113,7 @@ pub async fn cleanup_unreachable_files(db_pool: &Pool) -> Result<(), AppError> {
     let db_conn = db_pool.get().await?;
     return db_conn
         .interact(|conn| {
-            let upload_dir = std::fs::read_dir(UPLOAD_FILE_DIR)?;
+            let upload_dir = std::fs::read_dir(&conf().upload_file_dir)?;
             for entry in upload_dir {
                 let path = entry?.path();
                 if !path.is_file() {

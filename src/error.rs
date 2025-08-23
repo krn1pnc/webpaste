@@ -43,4 +43,7 @@ pub enum AppError {
 
     #[error("tail not found")]
     TailNotFound,
+
+    #[error("config parse error: {0}")]
+    ConfigParseError(String),
 }

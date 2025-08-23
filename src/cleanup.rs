@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::CLEANUP_URLS_DURATION;
+use crate::conf;
 use crate::db::{cleanup_expired_urls, cleanup_unreachable_files};
 use crate::error::AppError;
 
@@ -21,7 +21,7 @@ async fn cleanup_files(db_pool: &Pool) -> Result<(), AppError> {
 
 fn init_cleanup_urls(db_pool: Arc<Pool>) {
     tokio::task::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(CLEANUP_URLS_DURATION as u64));
+        let mut interval = tokio::time::interval(Duration::from_secs(conf().cleanup_urls_duration));
         loop {
             interval.tick().await;
             match cleanup_urls(&db_pool).await {
@@ -34,7 +34,8 @@ fn init_cleanup_urls(db_pool: Arc<Pool>) {
 
 fn init_cleanup_files(db_pool: Arc<Pool>) {
     tokio::task::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(CLEANUP_URLS_DURATION as u64));
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(conf().cleanup_files_duration));
         loop {
             interval.tick().await;
             match cleanup_files(&db_pool).await {
